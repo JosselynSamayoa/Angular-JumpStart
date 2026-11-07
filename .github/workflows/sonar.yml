@@ -1,0 +1,46 @@
+name: SonarQube Cloud
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build-test-scan:
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Descargar el código
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '16.20.2'
+
+      - name: Instalar dependencias
+        run: npm ci --legacy-peer-deps
+
+      - name: Compilar Angular
+        run: npm run build
+
+      - name: Instalar Cypress
+        run: npm install --no-save --package-lock=false --legacy-peer-deps cypress@12.17.4
+
+      - name: Ejecutar pruebas Cypress
+        continue-on-error: true
+        run: |
+          npm start &
+          curl --fail --silent --show-error --retry 15 --retry-connrefused --retry-delay 2 http://127.0.0.1:8080/ > /dev/null
+          npx cypress run
+
+      - name: Analizar con SonarQube Cloud
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+        uses: SonarSource/sonarqube-scan-action@v7
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
